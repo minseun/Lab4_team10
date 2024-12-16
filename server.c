@@ -1,3 +1,4 @@
+#include "network.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,7 @@
 #define PORT 8080
 #define MAX_CLIENTS 10
 #define BUFFER_SIZE 1024
+#define DOWNLOAD_DIR "/home/min/test_lab4/"  // 리눅스 경로로 변경
 
 typedef struct {
     int socket;
@@ -48,47 +50,42 @@ void receive_file_from_client(int client_socket) {
     char buffer[BUFFER_SIZE];
     char file_path[256];
     char file_name[256];
-    char save_path[512]; // 파일 저장 경로
+    char save_path[512]; 
     long file_size;
     long bytes_received = 0;
 
-    
-    // 파일 메타데이터 수신
+
     if (recv(client_socket, buffer, sizeof(buffer), 0) <= 0) {
         perror("Failed to receive file metadata");
         return;
     }
-    // FILE_UPLOAD 프로토콜 확인 및 메타데이터 파싱
+
+
     if (strncmp(buffer, "FILE_UPLOAD:", 12) == 0) {
-        sscanf(buffer, "FILE_UPLOAD:%[^:]:%ld", file_name, &file_size);
-        printf("Receiving file: %s (%ld bytes)\n", file_name, file_size);
-
-
-        // 파일 이름만 추출
-        strncpy(file_name, basename(file_path), sizeof(file_name) - 1);
-        file_name[sizeof(file_name) - 1] = '\0'; // 문자열 종료 보장
-
-        // 저장 경로 설정 (test_lab4 디렉터리에 저장)
-        snprintf(save_path, sizeof(save_path), "./test_lab4/%s", file_name);
-        printf("Receiving file: %s (%ld bytes), Saving to: %s\n", file_name, file_size, save_path);
-
-
-        // 저장 디렉터리 존재 여부 확인 및 생성
-        mkdir("./test_lab4", 0777); // uploads 디렉터리가 없으면 생성
-
-
-        // 파일 열기
-        FILE *file = fopen(file_name, "wb");
-        if (!file) {
-            perror("File open failed");
+        if (sscanf(buffer, "FILE_UPLOAD:%255[^:]:%ld", file_path, &file_size) != 2) {
+            printf("Invalid FILE_UPLOAD command format.\n");
             return;
         }
 
-        // 파일 데이터 수신
+        // 파일 이름만 추출
+        strncpy(file_name, basename(file_path), sizeof(file_name) - 1);
+        file_name[sizeof(file_name) - 1] = '\0';
+
+        // 저장 경로 설정
+        snprintf(save_path, sizeof(save_path), "/home/min/trash2/test_lab4/%s", file_name);
+        printf("Receiving file: %s (%ld bytes), Saving to: %s\n", file_name, file_size, save_path);
+
+        // 파일 열기
+        FILE *file = fopen(save_path, "wb");
+        if (!file) {
+            perror("Failed to open file for writing");
+            return;
+        }
+
         ssize_t len;
-        while (bytes_received < file_size) { // 파일 크기 기준으로 수신
-            len = recv(client_socket, buffer, BUFFER_SIZE, 0);
-            if (len <= 0) { // 오류 또는 클라이언트 연결 종료
+        while (bytes_received < file_size) {
+            len = recv(client_socket, buffer, sizeof(buffer), 0);
+            if (len <= 0) {
                 perror("Failed to receive file data");
                 break;
             }
@@ -96,21 +93,12 @@ void receive_file_from_client(int client_socket) {
             bytes_received += len;
         }
 
-
-        // 파일 수신 완료 확인
-        if (bytes_received == file_size) {
-        printf("File received successfully: %s (%ld bytes)\n", file_name, bytes_received);
-        } else {
-            printf("File transfer incomplete: %s (received %ld of %ld bytes)\n", file_name, bytes_received, file_size);
-        }
-        
-
         fclose(file);
-        printf("File saved: %s\n", file_name);
     } else {
         printf("Invalid FILE_UPLOAD command format.\n");
     }
 }
+
 
 //핸들러러
 void *handle_client(void *arg) {

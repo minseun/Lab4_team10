@@ -1,9 +1,9 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#define BUFFER_SIZE 1024  // 이 부분을 정의
+#define BUFFER_SIZE 1024 
 
-extern int sock;  // sock 변수 선언
+extern int sock;  
 
 // 서버 연결 함수
 int connect_to_server(const char *ip, int port);
@@ -20,4 +20,7 @@ void upload_file_to_server(const char *file_path);
 // 파일 다운로드 함수
 void download_file_from_server(const char *file_name);
 
-#endif // NETWORK_H
+// 디렉토리 존재 여부 확인 및 없으면 생성 함수
+void ensure_directory_exists(const char *path);
+
+#endif 

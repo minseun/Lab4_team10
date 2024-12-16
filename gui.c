@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include <fcntl.h>
 #include <glib.h>
 
@@ -25,12 +26,9 @@ void *receive_messages_gui(void *arg) {
     while ((bytes_read = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
         buffer[bytes_read] = '\0';
 
-        // 일반 메시지 출력
-        //if (g_utf8_validate(buffer, -1, NULL)) {
-            gdk_threads_add_idle((GSourceFunc)gtk_text_buffer_insert_at_cursor, text_buffer);
-            gtk_text_buffer_insert_at_cursor(text_buffer, buffer, -1);
-            gtk_text_buffer_insert_at_cursor(text_buffer, "\n", -1);
-        //}
+        gdk_threads_add_idle((GSourceFunc)gtk_text_buffer_insert_at_cursor, text_buffer);
+        gtk_text_buffer_insert_at_cursor(text_buffer, buffer, -1);
+        gtk_text_buffer_insert_at_cursor(text_buffer, "\n", -1);
     }
 
     gtk_text_buffer_insert_at_cursor(text_buffer, "Server disconnected.\n", -1);
@@ -65,7 +63,8 @@ void send_message(GtkWidget *widget, gpointer data) {
     }
 }
 
-//파일 업로드 버튼 누르면
+
+// 파일 업로드 버튼을 눌렀을 때 실행되는 함수
 void on_file_upload_button_clicked(GtkWidget *widget, gpointer data) {
     GtkWidget *dialog = gtk_file_chooser_dialog_new("Select a file to upload",
                                                    NULL,
@@ -74,13 +73,42 @@ void on_file_upload_button_clicked(GtkWidget *widget, gpointer data) {
                                                    "_Open", GTK_RESPONSE_ACCEPT,
                                                    NULL);
 
+    // 파일 선택 후
     if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
         char *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
-        upload_file_to_server(file_path);
+
+        // 파일 확인 창
+        GtkWidget *confirm_dialog = gtk_message_dialog_new(
+            NULL,
+            GTK_DIALOG_MODAL,
+            GTK_MESSAGE_QUESTION,
+            GTK_BUTTONS_YES_NO,
+            "파일을 보내시겠습니까?\n%s", file_path
+        );
+
+        // 확인 버튼 누르면 업로드
+        gint response = gtk_dialog_run(GTK_DIALOG(confirm_dialog));
+
+        if (response == GTK_RESPONSE_YES) {
+            upload_file_to_server(file_path);  // 파일 업로드
+            printf("File uploaded: %s\n", file_path);
+
+            const char *file_name = g_path_get_basename(file_path);
+            download_file_from_server(file_name);
+            printf("File downloaded: %s\n", file_name);
+        } else {
+            printf("파일 업로드가 취소되었습니다.\n");
+        }
+
+        gtk_widget_destroy(confirm_dialog);
         g_free(file_path);
     }
+
     gtk_widget_destroy(dialog);
 }
+
+
+
 
 
 
@@ -116,6 +144,7 @@ int main(int argc, char *argv[]) {
     g_signal_connect(send_button, "clicked", G_CALLBACK(send_message), NULL);
     g_signal_connect(entry, "activate", G_CALLBACK(send_message), NULL);
 
+    
     // 파일 업로드 버튼 추가
     GtkWidget *upload_button = gtk_button_new_with_label("Upload File");
     gtk_box_pack_start(GTK_BOX(vbox), upload_button, FALSE, FALSE, 0);
@@ -125,6 +154,8 @@ int main(int argc, char *argv[]) {
         perror("Thread creation failed");
         return EXIT_FAILURE;
     }
+    
+
 
     gtk_widget_show_all(window);
     gtk_main();

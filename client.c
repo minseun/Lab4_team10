@@ -42,6 +42,7 @@ int main() {
         printf("Enter command (UPLOAD <file>, DOWNLOAD <file>, or message): ");
         fgets(command, sizeof(command), stdin);
 
+        /*
         // 파일 업로드 명령 처리
         if (strncmp(command, "UPLOAD", 6) == 0) {
             char file_path[BUFFER_SIZE];
@@ -58,6 +59,7 @@ int main() {
         else {
             send_message_to_server(command);  // 채팅 메시지 전송
         }
+        */
     }
 
     return 0;
