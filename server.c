@@ -53,7 +53,7 @@ void *handle_client(void *arg) {
     }
 
 
-
+    memset(client_name, 0, sizeof(client_name)); // 이름 버퍼 초기화
     // 클라이언트 이름 받기
     if (recv(client_socket, client_name, sizeof(client_name), 0) <= 0) {
         perror("Failed to receive client name");
@@ -91,6 +91,8 @@ void *handle_client(void *arg) {
     // 메시지 수신 및 브로드캐스트
     while ((bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
         buffer[bytes_read] = '\0'; // Null-terminate the received string
+
+        printf("Message received from %s: %s\n", client_name, buffer);
 
         // 최대 출력 길이를 계산하고 안전하게 설정
         int remaining_space = sizeof(message) - strlen(client_name) - 5; // " > " + '\0' 포함
