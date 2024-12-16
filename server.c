@@ -3,7 +3,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <libgen.h>
+#include <sys/stat.h>  // mkdir 함수 선언
+#include <sys/types.h> // 일부 시스템에서 필요할 수 있음
+
 
 #define PORT 8080
 #define MAX_CLIENTS 10
@@ -38,13 +43,83 @@ void broadcast_message(const char *message, int sender_socket) {
     pthread_mutex_unlock(&lock);
 }
 
+//파일 받기 함수
+void receive_file_from_client(int client_socket) {
+    char buffer[BUFFER_SIZE];
+    char file_path[256];
+    char file_name[256];
+    char save_path[512]; // 파일 저장 경로
+    long file_size;
+    long bytes_received = 0;
+
+    
+    // 파일 메타데이터 수신
+    if (recv(client_socket, buffer, sizeof(buffer), 0) <= 0) {
+        perror("Failed to receive file metadata");
+        return;
+    }
+    // FILE_UPLOAD 프로토콜 확인 및 메타데이터 파싱
+    if (strncmp(buffer, "FILE_UPLOAD:", 12) == 0) {
+        sscanf(buffer, "FILE_UPLOAD:%[^:]:%ld", file_name, &file_size);
+        printf("Receiving file: %s (%ld bytes)\n", file_name, file_size);
+
+
+        // 파일 이름만 추출
+        strncpy(file_name, basename(file_path), sizeof(file_name) - 1);
+        file_name[sizeof(file_name) - 1] = '\0'; // 문자열 종료 보장
+
+        // 저장 경로 설정 (test_lab4 디렉터리에 저장)
+        snprintf(save_path, sizeof(save_path), "./test_lab4/%s", file_name);
+        printf("Receiving file: %s (%ld bytes), Saving to: %s\n", file_name, file_size, save_path);
+
+
+        // 저장 디렉터리 존재 여부 확인 및 생성
+        mkdir("./test_lab4", 0777); // uploads 디렉터리가 없으면 생성
+
+
+        // 파일 열기
+        FILE *file = fopen(file_name, "wb");
+        if (!file) {
+            perror("File open failed");
+            return;
+        }
+
+        // 파일 데이터 수신
+        ssize_t len;
+        while (bytes_received < file_size) { // 파일 크기 기준으로 수신
+            len = recv(client_socket, buffer, BUFFER_SIZE, 0);
+            if (len <= 0) { // 오류 또는 클라이언트 연결 종료
+                perror("Failed to receive file data");
+                break;
+            }
+            fwrite(buffer, 1, len, file);
+            bytes_received += len;
+        }
+
+
+        // 파일 수신 완료 확인
+        if (bytes_received == file_size) {
+        printf("File received successfully: %s (%ld bytes)\n", file_name, bytes_received);
+        } else {
+            printf("File transfer incomplete: %s (received %ld of %ld bytes)\n", file_name, bytes_received, file_size);
+        }
+        
+
+        fclose(file);
+        printf("File saved: %s\n", file_name);
+    } else {
+        printf("Invalid FILE_UPLOAD command format.\n");
+    }
+}
+
+//핸들러러
 void *handle_client(void *arg) {
     int client_socket = *(int *)arg;
     char buffer[BUFFER_SIZE];
     char message[BUFFER_SIZE + 50];
     int bytes_read;
     char client_name[50] = "";
-
+    ssize_t bytes_received_total = 0;
 
     // HTTP 요청 무시 처리
     if (strncmp(buffer, "GET ", 4) == 0 || strncmp(buffer, "POST ", 5) == 0) {
@@ -91,13 +166,49 @@ void *handle_client(void *arg) {
     // 메시지 수신 및 브로드캐스트
     while ((bytes_read = recv(client_socket, buffer, BUFFER_SIZE - 1, 0)) > 0) {
         buffer[bytes_read] = '\0'; // Null-terminate the received string
+        printf("\nMessage received from %s: %s\n", client_name, buffer);
 
-        printf("Message received from %s: %s\n", client_name, buffer);
 
+        // 파일 업로드 처리
+        if (strncmp(buffer, "FILE_UPLOAD:", 12) == 0) {
+            printf("File upload request received from %s.\n", client_name);
+            receive_file_from_client(client_socket);
+            continue;
+        }
+
+
+         // 파일 다운로드 처리
+        if (strncmp(buffer, "FILE_DOWNLOAD:", 14) == 0) {
+            char file_name[BUFFER_SIZE];
+            sscanf(buffer + 14, "%s", file_name);
+            FILE *file = fopen(file_name, "rb");
+            if (!file) {
+                perror("File not found");
+                send(client_socket, "File not found\n", 15, 0);
+            } else {
+                size_t bytes_read;
+                while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0) {
+                    if (send(client_socket, buffer, bytes_read, 0) == -1) {
+                        perror("Failed to send file");
+                        break;
+                    }
+                }
+                fclose(file);
+                printf("File sent: %s\n", file_name);
+            }
+            continue;
+        }
+
+
+
+
+        
+
+
+        // 채팅처리
         // 최대 출력 길이를 계산하고 안전하게 설정
         int remaining_space = sizeof(message) - strlen(client_name) - 5; // " > " + '\0' 포함
         snprintf(message, sizeof(message), "%s > %.*s", client_name, remaining_space, buffer);
-
         printf("%s", message);
         broadcast_message(message, client_socket);
     }
@@ -114,7 +225,7 @@ void *handle_client(void *arg) {
     pthread_mutex_unlock(&lock);
 
     printf("%s left the chat\n", client_name);
-    snprintf(message, sizeof(message), "%s has left the chat\n", client_name);
+    snprintf(message, sizeof(message), "\n %s has left the chat\n", client_name);
     broadcast_message(message, client_socket);
 
     close(client_socket);
@@ -136,7 +247,8 @@ int main() {
         perror("Socket creation failed");
         exit(EXIT_FAILURE);
     }
-
+    
+    server_socket = socket(AF_INET, SOCK_STREAM, 0);
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
     server_addr.sin_port = htons(PORT);

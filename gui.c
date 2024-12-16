@@ -51,6 +51,23 @@ void send_message(GtkWidget *widget, gpointer data) {
     }
 }
 
+//파일 업로드 버튼 누르면
+void on_file_upload_button_clicked(GtkWidget *widget, gpointer data) {
+    GtkWidget *dialog = gtk_file_chooser_dialog_new("Select a file to upload",
+                                                   NULL,
+                                                   GTK_FILE_CHOOSER_ACTION_OPEN,
+                                                   "_Cancel", GTK_RESPONSE_CANCEL,
+                                                   "_Open", GTK_RESPONSE_ACCEPT,
+                                                   NULL);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+        char *file_path = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+        upload_file_to_server(file_path);
+        g_free(file_path);
+    }
+    gtk_widget_destroy(dialog);
+}
+
 
 
 int main(int argc, char *argv[]) {
@@ -88,7 +105,7 @@ int main(int argc, char *argv[]) {
     // 파일 업로드 버튼 추가
     GtkWidget *upload_button = gtk_button_new_with_label("Upload File");
     gtk_box_pack_start(GTK_BOX(vbox), upload_button, FALSE, FALSE, 0);
-    //g_signal_connect(upload_button, "clicked", G_CALLBACK(on_file_upload_button_clicked), NULL);
+    g_signal_connect(upload_button, "clicked", G_CALLBACK(on_file_upload_button_clicked), NULL);//파일 업로드 버튼 누르면
 
     if (pthread_create(&recv_thread, NULL, receive_messages_gui, NULL) != 0) {
         perror("Thread creation failed");

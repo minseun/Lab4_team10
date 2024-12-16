@@ -14,4 +14,10 @@ void send_message_to_server(const char *message);
 // 메시지 수신 스레드 함수
 void *receive_messages(void *arg);
 
+// 파일 업로드 함수
+void upload_file_to_server(const char *file_path);
+
+// 파일 다운로드 함수
+void download_file_from_server(const char *file_name);
+
 #endif // NETWORK_H
