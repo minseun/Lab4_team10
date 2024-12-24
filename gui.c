@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <glib.h>
 
 #include "network.h"
 
@@ -40,6 +41,19 @@ void *receive_messages_gui(void *arg) {
 
 void send_message(GtkWidget *widget, gpointer data) {
     const char *message = gtk_entry_get_text(entry);
+
+    // 문자열 인코딩
+    if (!g_utf8_validate(message, -1, NULL)) {
+        // UTF-8이 아닌 경우 변환
+        gchar *converted_message = g_convert(message, -1, "UTF-8", "ISO-8859-1", NULL, NULL, NULL);
+        if (converted_message != NULL) {
+            message = converted_message;  // 변환된 메시지로 갱신
+        } else {
+            // 변환이 실패하면 원본 메시지를 사용
+            message = "";
+        }
+    }
+    
     if (strlen(message) > 0) {
         send_message_to_server(message);
 
